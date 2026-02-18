@@ -28,6 +28,8 @@ class LLMService:
                 return self._classify_openai(description)
             elif provider == 'anthropic':
                 return self._classify_anthropic(description)
+            elif provider == 'gemini' or provider == 'google':
+                return self._classify_gemini(description)
             else:
                 logger.warning(f"Unknown LLM provider: {self.provider}")
                 return ('general', 'medium')
@@ -142,4 +144,53 @@ Guidelines:
         except Exception as e:
             logger.error(f"Anthropic error: {str(e)}")
             raise
+
+    def _classify_gemini(self, description: str) -> Tuple[str, str]:
+        """Use Google Gemini API for classification (free tier available)"""
+        try:
+            import google.generativeai as genai
+            
+            genai.configure(api_key=self.api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            prompt = f"""Analyze this support ticket description and classify it.
+
+Description: {description}
+
+Respond with ONLY a JSON object (no markdown, no extra text):
+{{"category": "billing|technical|account|general", "priority": "low|medium|high|critical"}}
+
+Guidelines:
+- billing: Payment, invoicing, subscription issues
+- technical: Software bugs, feature requests, technical issues
+- account: Profile, password, access issues
+- general: Other questions
+- priority: Critical if urgent/blocking, High if important, Medium if normal, Low if minor
+"""
+
+            response = model.generate_content(prompt)
+            result_text = response.text.strip()
+            
+            # Try to extract JSON from response (in case it includes markdown)
+            if '```' in result_text:
+                result_text = result_text.split('```')[1]
+                if result_text.startswith('json'):
+                    result_text = result_text[4:]
+            
+            result = json.loads(result_text)
+            
+            category = result.get('category', 'general')
+            priority = result.get('priority', 'medium')
+            
+            if category not in ['billing', 'technical', 'account', 'general']:
+                category = 'general'
+            if priority not in ['low', 'medium', 'high', 'critical']:
+                priority = 'medium'
+                
+            logger.info(f"Gemini classification: category={category}, priority={priority}")
+            return (category, priority)
+        except Exception as e:
+            logger.error(f"Gemini error: {str(e)}")
+            raise
+
 
