@@ -13,6 +13,23 @@ class TicketViewSet(viewsets.ModelViewSet):
     serializer_class = TicketSerializer
     llm_service = LLMService()
 
+    def perform_create(self, serializer):
+        """
+        Override create to automatically classify ticket using LLM
+        """
+        # Extract title and description for classification
+        title = serializer.validated_data.get('title', '')
+        description = serializer.validated_data.get('description', '')
+        
+        # Combine title and description for better context
+        full_text = f"{title}. {description}"
+        
+        # Classify using LLM (Anthropic)
+        category, priority = self.llm_service.classify_ticket(full_text)
+        
+        # Save with LLM-determined category and priority
+        serializer.save(category=category, priority=priority)
+
     def get_queryset(self):
         queryset = Ticket.objects.all()
         

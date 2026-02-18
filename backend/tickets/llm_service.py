@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import requests
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,12 @@ class LLMService:
             return ('general', 'medium')
 
         try:
-            if self.provider == 'openai':
+            # Normalize provider to lowercase for comparison
+            provider = self.provider.lower() if self.provider else 'openai'
+            
+            if provider == 'openai':
                 return self._classify_openai(description)
-            elif self.provider == 'anthropic':
+            elif provider == 'anthropic':
                 return self._classify_anthropic(description)
             else:
                 logger.warning(f"Unknown LLM provider: {self.provider}")
@@ -76,12 +80,8 @@ Guidelines:
             raise
 
     def _classify_anthropic(self, description: str) -> Tuple[str, str]:
-        """Use Anthropic API for classification"""
+        """Use Anthropic REST API for classification (avoiding SDK issues)"""
         try:
-            import anthropic
-            
-            client = anthropic.Anthropic(api_key=self.api_key)
-            
             prompt = f"""Analyze this support ticket description and classify it.
 
 Description: {description}
@@ -97,13 +97,36 @@ Guidelines:
 - priority: Critical if urgent/blocking, High if important, Medium if normal, Low if minor
 """
 
-            response = client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=100,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            headers = {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
 
-            result_text = response.content[0].text.strip()
+            payload = {
+                "model": "claude-haiku-3-20240307",
+                "max_tokens": 100,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                error_msg = f"Anthropic API error: Status {response.status_code}, Response: {response.text}"
+                logger.error(error_msg)
+                print(f"!!! {error_msg} !!!", flush=True)
+                response.raise_for_status()
+                
+            data = response.json()
+            
+            result_text = data["content"][0]["text"].strip()
             result = json.loads(result_text)
             
             category = result.get('category', 'general')
@@ -114,7 +137,9 @@ Guidelines:
             if priority not in ['low', 'medium', 'high', 'critical']:
                 priority = 'medium'
                 
+            logger.info(f"Anthropic classification: category={category}, priority={priority}")
             return (category, priority)
         except Exception as e:
             logger.error(f"Anthropic error: {str(e)}")
             raise
+
