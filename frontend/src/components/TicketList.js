@@ -4,6 +4,7 @@ import { ticketAPI } from '../api';
 const TicketList = ({ refreshTrigger }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     category: '',
     priority: '',
@@ -14,6 +15,7 @@ const TicketList = ({ refreshTrigger }) => {
 
   const fetchTickets = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = Object.fromEntries(
         Object.entries(filters).filter(([_, v]) => v !== '')
@@ -22,6 +24,7 @@ const TicketList = ({ refreshTrigger }) => {
       setTickets(response.data.results || response.data);
     } catch (error) {
       console.error('Failed to fetch tickets:', error);
+      setError('Failed to load tickets. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -39,6 +42,7 @@ const TicketList = ({ refreshTrigger }) => {
       ));
     } catch (error) {
       console.error('Failed to update ticket:', error);
+      alert('Failed to update ticket status');
     }
   };
 
@@ -71,6 +75,12 @@ const TicketList = ({ refreshTrigger }) => {
 
   return (
     <div>
+      {error && (
+        <div className="error-message" style={{ marginBottom: '1rem' }}>
+          {error}
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginBottom: '1rem' }}>Filters</h2>
         <div className="filters">
@@ -168,8 +178,11 @@ const TicketList = ({ refreshTrigger }) => {
               {expandedId === ticket.id && (
                 <div className="ticket-actions" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e0e0e0' }}>
                   <select
-                    onChange={(e) => handleStatusChange(ticket.id, e.target.value)}
-                    value={ticket.status}
+                    onChange={(e) => {
+                      handleStatusChange(ticket.id, e.target.value);
+                      e.target.value = ticket.status;
+                    }}
+                    defaultValue={ticket.status}
                     onClick={(e) => e.stopPropagation()}
                     className="btn-sm"
                     style={{ padding: '0.5rem 0.75rem' }}

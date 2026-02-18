@@ -4,14 +4,17 @@ import { ticketAPI } from '../api';
 const StatsDashboard = ({ refreshTrigger }) => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchStats = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await ticketAPI.getStats();
       setStats(response.data);
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      setError('Failed to load statistics');
     } finally {
       setLoading(false);
     }
@@ -19,6 +22,9 @@ const StatsDashboard = ({ refreshTrigger }) => {
 
   useEffect(() => {
     fetchStats();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
   }, [refreshTrigger]);
 
   if (loading) {
@@ -30,12 +36,24 @@ const StatsDashboard = ({ refreshTrigger }) => {
     );
   }
 
-  if (!stats) {
-    return <div className="card">Failed to load statistics</div>;
+  if (error) {
+    return (
+      <div className="card">
+        <div className="error-message">{error}</div>
+      </div>
+    );
   }
 
-  const maxPriority = Math.max(...Object.values(stats.priority_breakdown));
-  const maxCategory = Math.max(...Object.values(stats.category_breakdown));
+  if (!stats) {
+    return (
+      <div className="card">
+        <p>No statistics available yet. Create your first ticket to get started!</p>
+      </div>
+    );
+  }
+
+  const maxPriority = Math.max(...Object.values(stats.priority_breakdown), 1);
+  const maxCategory = Math.max(...Object.values(stats.category_breakdown), 1);
 
   return (
     <div>
@@ -98,6 +116,10 @@ const StatsDashboard = ({ refreshTrigger }) => {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '2rem', fontSize: '0.9rem', color: '#666' }}>
+        <p>💡 Dashboard auto-refreshes every 30 seconds. Statistics use database-level aggregation for optimal performance.</p>
       </div>
     </div>
   );

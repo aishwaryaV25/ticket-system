@@ -12,6 +12,7 @@ const SubmitTicketForm = ({ onTicketCreated }) => {
   const [loadingClassify, setLoadingClassify] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const [classifyTimeoutId, setClassifyTimeoutId] = useState(null);
 
   const classifyDescription = useCallback(async (description) => {
     if (description.length < 10) return;
@@ -21,11 +22,12 @@ const SubmitTicketForm = ({ onTicketCreated }) => {
       const response = await ticketAPI.classify(description);
       setFormData(prev => ({
         ...prev,
-        category: response.data.suggested_category,
-        priority: response.data.suggested_priority,
+        category: response.data.suggested_category || 'general',
+        priority: response.data.suggested_priority || 'medium',
       }));
     } catch (error) {
       console.error('LLM classification failed:', error);
+      // Silently fail - user can still submit with default values
     } finally {
       setLoadingClassify(false);
     }
@@ -35,11 +37,17 @@ const SubmitTicketForm = ({ onTicketCreated }) => {
     const description = e.target.value;
     setFormData(prev => ({ ...prev, description }));
     
+    // Clear previous timeout
+    if (classifyTimeoutId) {
+      clearTimeout(classifyTimeoutId);
+    }
+    
+    // Set new timeout for classification
     const timeoutId = setTimeout(() => {
       classifyDescription(description);
     }, 800);
-
-    return () => clearTimeout(timeoutId);
+    
+    setClassifyTimeoutId(timeoutId);
   };
 
   const handleSubmit = async (e) => {
@@ -48,7 +56,7 @@ const SubmitTicketForm = ({ onTicketCreated }) => {
 
     try {
       const response = await ticketAPI.create(formData);
-      setMessage({ type: 'success', text: 'Ticket created successfully!' });
+      setMessage({ type: 'success', text: '✓ Ticket created successfully!' });
       setFormData({
         title: '',
         description: '',
@@ -60,7 +68,7 @@ const SubmitTicketForm = ({ onTicketCreated }) => {
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.detail || 'Failed to create ticket' 
+        text: '✗ ' + (error.response?.data?.detail || 'Failed to create ticket') 
       });
     } finally {
       setSubmitting(false);

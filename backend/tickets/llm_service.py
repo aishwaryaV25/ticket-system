@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from typing import Dict, Tuple
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
