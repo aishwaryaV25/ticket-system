@@ -146,13 +146,8 @@ Guidelines:
             raise
 
     def _classify_gemini(self, description: str) -> Tuple[str, str]:
-        """Use Google Gemini API for classification (free tier available)"""
+        """Use Google Gemini API REST directly for classification"""
         try:
-            import google.generativeai as genai
-            
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
             prompt = f"""Analyze this support ticket description and classify it.
 
 Description: {description}
@@ -168,8 +163,33 @@ Guidelines:
 - priority: Critical if urgent/blocking, High if important, Medium if normal, Low if minor
 """
 
-            response = model.generate_content(prompt)
-            result_text = response.text.strip()
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+            
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt}
+                        ]
+                    }
+                ]
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            
+            if response.status_code != 200:
+                error_detail = response.text
+                logger.error(f"Gemini REST API error: Status {response.status_code}, Response: {error_detail}")
+                response.raise_for_status()
+                
+            data = response.json()
+            
+            # Extract text from response
+            try:
+                result_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+            except (KeyError, IndexError) as e:
+                logger.error(f"Failed to extract text from Gemini response: {data}, Error: {e}")
+                raise
             
             # Try to extract JSON from response (in case it includes markdown)
             if '```' in result_text:
@@ -187,7 +207,7 @@ Guidelines:
             if priority not in ['low', 'medium', 'high', 'critical']:
                 priority = 'medium'
                 
-            logger.info(f"Gemini classification: category={category}, priority={priority}")
+            logger.info(f"✅ Gemini classification SUCCESS: category={category}, priority={priority}")
             return (category, priority)
         except Exception as e:
             logger.error(f"Gemini error: {str(e)}")
